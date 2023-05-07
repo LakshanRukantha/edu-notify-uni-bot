@@ -10,6 +10,7 @@ const logger = require("./src/utils/logger");
 const token = process.env.TELEGRAM_TOKEN;
 const port = process.env.PORT || 4000;
 const db_connection_string = process.env.MONGODB_CONNECTION_STRING;
+const adminId = Number(process.env.ADMIN_ID);
 
 //Instances declaration
 const bot = new TelegramBot(token, { polling: true });
@@ -71,10 +72,10 @@ const authenticate = async (msg) => {
 
   // Check if the user is registered
   const user = await User.findOne({ telegramId });
-  if (!user) {
+  if (!user || !user.notify) {
     bot.sendMessage(
       msg.chat.id,
-      "❌ You are not registered.\nPlease use the /register command to register."
+      "Status: 🚫 Access denided. \nDescription: 😕 You are not registered. Please use the /register command to register."
     );
     return false;
   }
@@ -180,16 +181,13 @@ bot.onText(/\/unregister/, async (msg) => {
       user.notify = false;
       await user.save();
       // Send a confirmation message to the user
-      bot.sendMessage(
-        chatId,
-        "😥 You have been unregistered."
-      );
+      bot.sendMessage(chatId, "😥 You have been unregistered.");
     }
   } catch (err) {
-    console.error(err);
+    logger.error(err);
     bot.sendMessage(
       chatId,
-      "An error occurred while unregistering. Please try again later."
+      "❌ An error occurred while unregistering. Please try again later."
     );
   }
 });
@@ -199,28 +197,69 @@ async function getAllUsers() {
     const users = await User.find({});
     return users;
   } catch (err) {
-    console.error(err);
+    logger.error(err);
   }
 }
 
 // Handle the /users command
 bot.onText(/\/users/, async (msg) => {
+  const chatId = msg.chat.id;
   if (await authenticate(msg)) {
-    // Call the getAllUsers function to retrieve the list of users
-    const users = await getAllUsers();
+    if (chatId === adminId) {
+      // Call the getAllUsers function to retrieve the list of users
+      const users = await getAllUsers();
 
-    // Construct a message with the user names and ids
-    let message = "Here's a list of all the users:\n\n";
-    await Promise.all(
-      users.map(async (user, index) => {
-        message += `User ${index + 1}:\nName: ${user.name}\nID: ${
-          user.telegramId
-        }\nBirthday: ${user.birthday}\nCourse: ${user.courseCode}\n\n`;
-      })
-    );
+      // Construct a message with the user names and ids
+      let message = "Here's a list of all the users:\n\n";
+      await Promise.all(
+        users.map(async (user, index) => {
+          const date = user.birthday;
 
-    // Send the message back to the user
-    bot.sendMessage(msg.chat.id, message);
+          const longDateString = date.toLocaleDateString("en-US", {
+            // weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          });
+          message += `User ${index + 1}:\nName: ${user.name}\nID: ${
+            user.telegramId
+          }\nBirthday: ${longDateString}\nCourse: ${user.courseCode}\n\n`;
+        })
+      );
+
+      // Send the message back to the user
+      bot.sendMessage(msg.chat.id, message);
+    } else {
+      bot.sendMessage(chatId, "🚫 You are not authorized to use this command.");
+    }
+  }
+});
+
+bot.onText(/\/account/, async (msg) => {
+  const chatId = msg.chat.id;
+
+  if (await authenticate(msg)) {
+    try {
+      const user = await User.findOne({ telegramId: chatId });
+
+      const date = user.birthday;
+
+      const longDateString = date.toLocaleDateString("en-US", {
+        // weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+
+      let message = "📋 Account Data:\n\n";
+      message += `👤 Name: ${user.name}\n🆔 User ID: ${user.telegramId}\n🎂 Birthday: ${longDateString}\n📚 Course Code: ${user.courseCode}`;
+
+      // Send the account data to the user
+      bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+    } catch (err) {
+      logger.error(err);
+      bot.sendMessage(chatId, "❌ An error occurred. Please try again later.");
+    }
   }
 });
 
