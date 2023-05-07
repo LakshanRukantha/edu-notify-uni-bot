@@ -24,7 +24,9 @@ app.get("/", (req, res) => {
 //DB Connection
 mongoose
   .connect(db_connection_string, {
-    //options
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    dbName: "userData", //This create database name
   })
   .then(() => {
     logger.info(`✅ Connected to the Database`);
@@ -33,10 +35,47 @@ mongoose
     logger.error(`❌ Database connection faliure!`);
   });
 
+// Define a schema for user registration
+const userSchema = new mongoose.Schema({
+  telegramId: {
+    type: String,
+    unique: true,
+    required: true,
+  },
+  name: {
+    type: String,
+    required: true,
+  },
+});
+
+// Create a model based on the schema
+const User = mongoose.model("User", userSchema, "users"); //In this 'users' create collection name
+
 //Bot connection status
 bot.onText(/\/status/, async (msg, match) => {
   const chatId = msg.chat.id;
   bot.sendMessage(chatId, "✅ Up and running.");
+});
+
+//Register user
+bot.onText(/\/register/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const user = new User({
+    telegramId: chatId.toString(),
+    name: msg.chat.first_name + " " + msg.chat.last_name,
+  });
+  try {
+    await user.save();
+    bot.sendMessage(
+      chatId,
+      "You have been registered for daily notifications."
+    );
+  } catch (err) {
+    bot.sendMessage(
+      chatId,
+      "You are already registered for daily notifications."
+    );
+  }
 });
 
 //Server listning
