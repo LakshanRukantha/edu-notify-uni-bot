@@ -1,0 +1,27 @@
+{
+  "name": "edu-notify-uni-bot",
+  "version": "1.0.0",
+  "description": "EduNotify bot provides users with an easy and convenient way to access their university timetable directly from Telegram. Once a user registers with the bot, they will receive an automatic daily update with the today's and next day's timetable.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon index.js",
+    "start": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LakshanRukantha/edu-notify-uni-bot.git"
+  },
+  "keywords": [],
+  "author": "Lakshan Rukantha",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/LakshanRukantha/edu-notify-uni-bot/issues"
+  },
+  "homepage": "https://github.com/LakshanRukantha/edu-notify-uni-bot#readme",
+  "dependencies": {
+    "dotenv": "^16.0.3"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
