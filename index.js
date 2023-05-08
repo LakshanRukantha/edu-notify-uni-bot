@@ -4,6 +4,7 @@ const express = require("express");
 const axios = require("axios");
 const mongoose = require("mongoose");
 const app = express();
+const schedule = require("node-schedule");
 const logger = require("./src/utils/logger");
 
 //Variables declaration
@@ -40,32 +41,117 @@ async function start() {
 start();
 
 // Define a schema for user registration
-const userSchema = new mongoose.Schema({
-  telegramId: {
-    type: String,
-    unique: true,
-    required: true,
+const userSchema = new mongoose.Schema(
+  {
+    telegramId: {
+      type: String,
+      unique: true,
+      required: true,
+    },
+    username: {
+      type: String,
+    },
+    name: {
+      type: String,
+      required: true,
+    },
+    birthday: {
+      type: Date,
+      required: true,
+    },
+    courseCode: {
+      type: String,
+      required: true,
+    },
+    notify: {
+      type: Boolean,
+      required: true,
+    },
   },
-  name: {
-    type: String,
-    required: true,
-  },
-  birthday: {
-    type: Date,
-    required: true,
-  },
-  courseCode: {
-    type: String,
-    required: true,
-  },
-  notify: {
-    type: Boolean,
-    required: true,
-  },
-});
+  { timestamps: true }
+);
 
 // Create a model based on the schema
-const User = mongoose.model("User", userSchema, "users"); //In this 'users' create collection name
+const User =
+  mongoose.models.User || mongoose.model("User", userSchema, "users");
+//In this 'users' create collection name
+
+const sheduleNotify = async () => {
+  // Schedule a daily check at 12:00 AM
+  schedule.scheduleJob("0 0 0 * * *", async () => {
+    // 0 0 0 * * * daily
+    const today = new Date();
+    const todayMonth = today.getUTCMonth() + 1;
+    const todayDay = today.getUTCDate();
+    logger.info(`Shedule message is executed`);
+    try {
+      const users = await User.find({
+        $expr: {
+          $and: [
+            { $eq: [{ $month: "$birthday" }, todayMonth] },
+            { $eq: [{ $dayOfMonth: "$birthday" }, todayDay] },
+          ],
+        },
+      });
+
+      if (users?.length === 0) {
+        logger.log("No users have a birthday today");
+        return;
+      }
+
+      const line = "------------------------------------------";
+      let message = "\n\nDev testing: {lakshan}\n\nToday birthdays:\n\n";
+      var currentdate = new Date();
+      var datetime =
+        "Execution Time: " +
+        currentdate.getDate() +
+        "/" +
+        (currentdate.getMonth() + 1) +
+        "/" +
+        currentdate.getFullYear() +
+        " @ " +
+        currentdate.getHours() +
+        ":" +
+        currentdate.getMinutes() +
+        ":" +
+        currentdate.getSeconds();
+      users.forEach((user) => {
+        const newDate = new Date(
+          user.birthday.setDate(user.birthday.getDate() - 1)
+        );
+        const longDateString = newDate.toLocaleDateString("en-US", {
+          // weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+        message += `${line}\n`;
+        message += `Name: ${user.name}\nBirthday: ${longDateString}`;
+        message += `\n${line}\n\n`;
+      });
+
+      message += `Wishing all our users born today a very happy birthday! 🎉🎂🎁🎈\n\n${datetime}`;
+
+      // Send the message to all registered users
+      const allUsers = await User.find({ notify: true });
+      const promises = allUsers.map(async (user) => {
+        return await bot
+          .sendMessage(user.telegramId, message)
+          .catch((error) => {
+            logger.error(
+              `Error sending message to user ${user.name}: ${error.message}`
+            );
+          });
+      });
+
+      await Promise.all(promises);
+    } catch (error) {
+      logger.error(`Error retrieving users from database: ${error.message}`);
+    }
+  });
+};
+
+//sheduleNotify();
 
 const authenticate = async (msg) => {
   const { id: telegramId } = msg.chat;
@@ -75,7 +161,7 @@ const authenticate = async (msg) => {
   if (!user || !user.notify) {
     bot.sendMessage(
       msg.chat.id,
-      "Status: 🚫 Access denided. \nDescription: 😕 You are not registered. Please use the /register command to register."
+      "🚫 Permission denided.\n😕 You are not registered."
     );
     return false;
   }
@@ -153,11 +239,14 @@ bot.onText(/\/register/, async (msg) => {
     break;
   }
 
+  const newDate = new Date(birthday.setDate(birthday.getDate() + 1));
+
   // Save the user's information to the database
   const newUser = new User({
     telegramId: chatId.toString(),
+    username: msg.chat.username || null,
     name: msg.chat.first_name + " " + msg.chat.last_name,
-    birthday: new Date(Date.parse(birthday)),
+    birthday: newDate,
     courseCode: courseCode,
     notify: true,
   });
@@ -221,9 +310,11 @@ bot.onText(/\/users/, async (msg) => {
             month: "long",
             day: "numeric",
           });
-          message += `User ${index + 1}:\nName: ${user.name}\nID: ${
-            user.telegramId
-          }\nBirthday: ${longDateString}\nCourse: ${user.courseCode}\n\n`;
+          message += `User ${index + 1}:\nName: ${user.name}\nUsername: ${
+            user.username
+          }\nID: ${user.telegramId}\nBirthday: ${longDateString}\nCourse: ${
+            user.courseCode
+          }\n\n`;
         })
       );
 
@@ -252,7 +343,7 @@ bot.onText(/\/account/, async (msg) => {
       });
 
       let message = "📋 Account Data:\n\n";
-      message += `👤 Name: ${user.name}\n🆔 User ID: ${user.telegramId}\n🎂 Birthday: ${longDateString}\n📚 Course Code: ${user.courseCode}`;
+      message += `👤 Name: ${user.name}\n💻 Username: ${user.username}\n🆔 User ID: ${user.telegramId}\n🎂 Birthday: ${longDateString}\n📚 Course Code: ${user.courseCode}`;
 
       // Send the account data to the user
       bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
