@@ -59,7 +59,15 @@ const userSchema = new mongoose.Schema(
       type: Date,
       required: true,
     },
-    courseCode: {
+    uniName: {
+      type: String,
+      required: true,
+    },
+    degreeName: {
+      type: String,
+      required: true,
+    },
+    group: {
       type: String,
       required: true,
     },
@@ -71,10 +79,38 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+//Define schema for timetable update
+const degreeSchema = new mongoose.Schema({
+  degreeCode: {
+    type: String,
+    required: true,
+  },
+  degreeName: {
+    type: String,
+    required: true,
+  },
+  year: {
+    type: Number,
+    required: true,
+  },
+  semester: {
+    type: Number,
+    required: true,
+  },
+  timetableUrl: {
+    type: String,
+    required: true,
+  },
+});
+
 // Create a model based on the schema
 const User =
   mongoose.models.User || mongoose.model("User", userSchema, "users");
 //In this 'users' create collection name
+
+//Degree model
+const Degree =
+  mongoose.models.Degree || mongoose.model("Degree", degreeSchema, "degrees");
 
 const sheduleNotify = async () => {
   // Schedule a daily check at 12:00 AM
@@ -224,10 +260,14 @@ bot.onText(/\/register/, async (msg) => {
     break;
   }
 
-  // Prompt the user for their course code
-  let courseCode;
+  // Prompt the user for their degree code
+  let degreeCode, degreeName, university, group;
   while (true) {
-    bot.sendMessage(chatId, "What is your course code?");
+    let message = `Degree codes: \n\nSE-UGC (Software Engineering - UGC)\nSE-PLY  (Software Engineering - Plymouth)\n\nGroup codes: \n\nA1 (A1 Group)\nA2 (A2 Group)\nB1 (B2 Group)\n`;
+    bot.sendMessage(
+      chatId,
+      `${message}\n\nWhat is your degree code? (ex: SE-UGC-B1): `
+    );
 
     // Listen for the user's response
     const response = await new Promise((resolve) =>
@@ -235,8 +275,53 @@ bot.onText(/\/register/, async (msg) => {
     );
     const text = response.text;
 
-    courseCode = text;
-    break;
+    let errMessage = "❌ Oops! Something went wrong. \n\n";
+    const formattedDegreeCode = text.toUpperCase().replace(/[^A-Z0-9-]/g, "");
+
+    const uniCheck = () => {
+      if (formattedDegreeCode.match("UGC")) {
+        university = "NSBM Green University";
+        return true;
+      } else if (formattedDegreeCode.match("PLY")) {
+        university = "Plymouth University";
+        return true;
+      } else if (formattedDegreeCode.match("VU")) {
+        university = "Victoria University";
+        return true;
+      } else {
+        errMessage +=
+          "❌ University not found in the current list. Please contact @lakshanrukantha to add your university to the bot's database.\n";
+        return false;
+      }
+    };
+    const degreeCheck = () => {
+      if (formattedDegreeCode.match("SE")) {
+        degreeName = "Software Engineering";
+        return true;
+      } else if (formattedDegreeCode.match("CS")) {
+        degreeName = "Computer Science";
+        return true;
+      } else {
+        errMessage +=
+          "❌ Sorry, we couldn't find your degree in our current list. Please contact @lakshanrukantha to add your degree to the bot's database.\n";
+        return false;
+      }
+    };
+
+    if (
+      formattedDegreeCode.length >= 5 &&
+      formattedDegreeCode.length <= 11 &&
+      uniCheck() &&
+      degreeCheck()
+    ) {
+      degreeCode = formattedDegreeCode;
+
+      group = degreeCode.slice(-2);
+      break;
+    } else {
+      errMessage += "❌ Invalid degree code. Please try again.";
+      bot.sendMessage(chatId, errMessage);
+    }
   }
 
   const newDate = new Date(birthday.setDate(birthday.getDate() + 1));
@@ -247,7 +332,9 @@ bot.onText(/\/register/, async (msg) => {
     username: msg.chat.username || null,
     name: msg.chat.first_name + " " + msg.chat.last_name,
     birthday: newDate,
-    courseCode: courseCode,
+    uniName: university,
+    degreeName: degreeName,
+    group: group,
     notify: true,
   });
   await newUser.save();
@@ -281,6 +368,12 @@ bot.onText(/\/unregister/, async (msg) => {
   }
 });
 
+//Get timetable
+bot.onText(/\/timetable/, async (msg) => {
+  const chatId = msg.chat.id;
+  console.log(chatId);
+});
+
 async function getAllUsers() {
   try {
     const users = await User.find({});
@@ -312,8 +405,8 @@ bot.onText(/\/users/, async (msg) => {
           });
           message += `User ${index + 1}:\nName: ${user.name}\nUsername: ${
             user.username
-          }\nID: ${user.telegramId}\nBirthday: ${longDateString}\nCourse: ${
-            user.courseCode
+          }\nID: ${user.telegramId}\nBirthday: ${longDateString}\Degree: ${
+            user.degreeCode
           }\n\n`;
         })
       );
@@ -342,8 +435,8 @@ bot.onText(/\/account/, async (msg) => {
         day: "numeric",
       });
 
-      let message = "📋 Account Data:\n\n";
-      message += `👤 Name: ${user.name}\n💻 Username: ${user.username}\n🆔 User ID: ${user.telegramId}\n🎂 Birthday: ${longDateString}\n📚 Course Code: ${user.courseCode}`;
+      let message = "📋 Account Information:\n\n";
+      message += `👤 Name: ${user.name}\n👨‍💻 Username: ${user.username}\n🆔 User ID: ${user.telegramId}\n🎂 Birthday: ${longDateString}\n🏫 University Name: ${user.uniName}\n🎓 Degree: ${user.degreeName}\n👻 Group: ${user.group}`;
 
       // Send the account data to the user
       bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
